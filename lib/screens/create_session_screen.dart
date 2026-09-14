@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../models/schedule.dart';
 import '../models/session.dart';
 import '../models/subject.dart';
 import '../services/api_service.dart';
@@ -24,6 +24,9 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
   List<Subject> _subjects = [];
   bool _loadingSubj = true;
   bool _creating = false;
+  bool _useSchedule = false;
+  List<ScheduleEntry> _scheduleEntries = [];
+  bool _loadingSchedule = false;
   String? _error;
 
   @override
@@ -47,6 +50,84 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
         _error = e.message;
       });
     }
+  }
+
+  Future<void> _loadSchedule() async {
+    setState(() {
+      _loadingSchedule = true;
+      _error = null;
+    });
+    try {
+      final all = await context.read<AppState>().api.getSchedule(_groupId);
+      if (!mounted) return;
+      final today = _date.weekday;
+      final entries = all
+          .where((e) => e.dayOfWeek == today && !e.cancelled)
+          .toList()
+        ..sort((a, b) => a.pairNumber.compareTo(b.pairNumber));
+      if (entries.isEmpty) {
+        setState(() {
+          _loadingSchedule = false;
+          _useSchedule = false;
+          _scheduleEntries = [];
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Расписание на сегодня пустое')),
+        );
+        return;
+      }
+      setState(() {
+        _scheduleEntries = entries;
+        _useSchedule = true;
+        _loadingSchedule = false;
+        _enabledPairs
+          ..clear()
+          ..addAll(entries.map((e) => e.pairNumber));
+        for (final e in entries) {
+          if (_subjects.any((s) => s.id == e.subjectId)) {
+            _pairSubj[e.pairNumber] = e.subjectId;
+          } else {
+            _pairSubj.remove(e.pairNumber);
+          }
+        }
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loadingSchedule = false;
+        _useSchedule = false;
+        _error = e.message;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loadingSchedule = false;
+        _useSchedule = false;
+        _error = 'Не удалось загрузить расписание';
+      });
+    }
+  }
+
+  void _switchToManual() {
+    _useSchedule = false;
+    _enabledPairs.clear();
+    for (final p in _pairSubj.keys) {
+      _pairSubj.remove(p);
+    }
+  }
+
+  static String? _pairTime(ScheduleEntry e) {
+    final t = [
+      if (e.timeStart != null && e.timeStart!.isNotEmpty) e.timeStart,
+      if (e.timeEnd != null && e.timeEnd!.isNotEmpty) e.timeEnd,
+    ].join('–');
+    final parts = [
+      if (t.isNotEmpty) t,
+      if (e.teacherFullName != null && e.teacherFullName!.isNotEmpty)
+        e.teacherFullName!,
+      if (e.classroom != null && e.classroom!.isNotEmpty) e.classroom!,
+    ];
+    return parts.isEmpty ? null : parts.join(' · ');
   }
 
   Future<void> _create() async {
@@ -100,7 +181,6 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final fmt = DateFormat('dd.MM.yyyy');
     final group = context.read<AppState>().group;
 
     return Scaffold(
@@ -119,20 +199,36 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
               ),
             ),
           const SizedBox(height: 16),
-          Card(
-            elevation: 0,
-            child: ListTile(
-              leading: const Icon(Icons.calendar_today),
-              title: const Text('Дата'),
-              subtitle: Text(fmt.format(_date)),
-              trailing: const Icon(Icons.lock_outline, size: 18),
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 8),
-            child: Text('Расписание на день',
-                style: TextStyle(fontWeight: FontWeight.w600)),
+          Row(
+            children: [
+              const Expanded(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 8),
+                  child: Text('Расписание на день',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
+                ),
+              ),
+              if (_useSchedule && _scheduleEntries.isNotEmpty)
+                TextButton.icon(
+                  onPressed: _loadingSchedule
+                      ? null
+                      : () => setState(_switchToManual),
+                  icon: const Icon(Icons.tune, size: 18),
+                  label: const Text('Вручную'),
+                )
+              else
+                TextButton.icon(
+                  onPressed: _loadingSchedule ? null : _loadSchedule,
+                  icon: _loadingSchedule
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.event_available, size: 18),
+                  label: Text(_loadingSchedule ? 'Загрузка…' : 'По расписанию'),
+                ),
+            ],
           ),
           const SizedBox(height: 8),
           if (_loadingSubj)
@@ -149,6 +245,25 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
                     'Список предметов пуст. Сначала добавьте предметы.'),
               ),
             )
+          else if (_useSchedule && _scheduleEntries.isNotEmpty)
+            for (final e in _scheduleEntries)
+              _PairCard(
+                pair: e.pairNumber,
+                subtitle: _pairTime(e),
+                enabled: _enabledPairs.contains(e.pairNumber),
+                subjectId: _pairSubj[e.pairNumber],
+                subjects: _subjects,
+                onToggle: (v) => setState(() {
+                  if (v) {
+                    _enabledPairs.add(e.pairNumber);
+                  } else {
+                    _enabledPairs.remove(e.pairNumber);
+                    _pairSubj[e.pairNumber] = null;
+                  }
+                }),
+                onSubjectChanged: (id) =>
+                    setState(() => _pairSubj[e.pairNumber] = id),
+              )
           else
             for (final pair in [1, 2, 3, 4])
               _PairCard(
@@ -203,6 +318,7 @@ class _CreateSessionScreenState extends State<CreateSessionScreen> {
 
 class _PairCard extends StatelessWidget {
   final int pair;
+  final String? subtitle;
   final bool enabled;
   final int? subjectId;
   final List<Subject> subjects;
@@ -210,6 +326,7 @@ class _PairCard extends StatelessWidget {
   final ValueChanged<int?> onSubjectChanged;
   const _PairCard({
     required this.pair,
+    this.subtitle,
     required this.enabled,
     required this.subjectId,
     required this.subjects,
@@ -226,6 +343,7 @@ class _PairCard extends StatelessWidget {
           CheckboxListTile(
             value: enabled,
             title: Text('Пара $pair'),
+            subtitle: subtitle == null ? null : Text(subtitle!),
             controlAffinity: ListTileControlAffinity.leading,
             onChanged: (v) => onToggle(v ?? false),
           ),

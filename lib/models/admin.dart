@@ -43,6 +43,30 @@ class AdminGroup {
       );
 }
 
+class MonitorInfo {
+  final int id;
+  final String login;
+  final String fullName;
+  final int? groupId;
+  final String? groupName;
+
+  MonitorInfo({
+    required this.id,
+    required this.login,
+    required this.fullName,
+    this.groupId,
+    this.groupName,
+  });
+
+  factory MonitorInfo.fromJson(Map<String, dynamic> json) => MonitorInfo(
+        id: json['id'],
+        login: json['login'] ?? '',
+        fullName: json['full_name'] ?? '',
+        groupId: json['group_id'],
+        groupName: json['group_name'],
+      );
+}
+
 class DeviceInfo {
   final int id;
   final String deviceId;

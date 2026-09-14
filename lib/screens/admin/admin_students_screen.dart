@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../models/admin.dart';
 import '../../models/group.dart';
 import '../../models/student.dart';
 import '../../services/api_service.dart';
@@ -17,6 +18,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen> {
   List<Group> _groups = [];
   Group? _group;
   List<Student> _students = [];
+  List<MonitorInfo> _monitors = [];
   bool _loading = true;
   String? _error;
 
@@ -65,9 +67,16 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen> {
     });
     try {
       final students = await api.getStudents(_group!.id);
+      List<MonitorInfo> monitors;
+      try {
+        monitors = await api.getMonitors(groupId: _group!.id);
+      } catch (_) {
+        monitors = [];
+      }
       if (!mounted) return;
       setState(() {
         _students = students;
+        _monitors = monitors;
         _loading = false;
       });
     } on ApiException catch (e) {
@@ -200,6 +209,189 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen> {
     }
   }
 
+  Future<void> _promptMonitor() async {
+    if (_students.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Сначала добавьте студентов в группу'),
+      ));
+      return;
+    }
+    Student? selected = _students.first;
+    final loginCtrl = TextEditingController(text: _slug(selected.fullName));
+    final passCtrl = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Назначить старосту'),
+          content: Form(
+            key: formKey,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DropdownButtonFormField<Student>(
+                    initialValue: selected,
+                    decoration: const InputDecoration(
+                      labelText: 'Студент',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: _students
+                        .map((s) => DropdownMenuItem(
+                            value: s,
+                            child: Text(s.fullName,
+                                overflow: TextOverflow.ellipsis)))
+                        .toList(),
+                    onChanged: (s) {
+                      setDialogState(() {
+                        selected = s!;
+                        loginCtrl.text = _slug(s.fullName);
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: loginCtrl,
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Логин',
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (v) =>
+                        (v == null || v.trim().isEmpty) ? 'Введите логин' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: passCtrl,
+                    obscureText: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Пароль',
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (v) =>
+                        (v == null || v.isEmpty) ? 'Введите пароль' : null,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Отмена'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (!(formKey.currentState?.validate() ?? false)) return;
+                Navigator.pop(ctx, true);
+              },
+              child: const Text('Назначить'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (result != true || selected == null) return;
+    final chosen = selected!;
+    if (!mounted) return;
+
+    final api = context.read<AppState>().api;
+    try {
+      await api.createMonitor(
+        studentId: chosen.id,
+        login: loginCtrl.text.trim(),
+        password: passCtrl.text,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Староста назначен')));
+      await _loadStudents();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  Future<void> _deleteMonitor(MonitorInfo m) async {
+    final api = context.read<AppState>().api;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Удалить старосту?'),
+        content: Text(
+            '${m.fullName} (${m.login}) больше не сможет отмечать посещаемость.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Удалить'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await api.deleteMonitor(m.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Староста удалён')));
+      await _loadStudents();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  static String _slug(String fullName) {
+    final parts = fullName.trim().split(RegExp(r'\s+'));
+    return parts.isEmpty ? 'starosta' : parts.first.toLowerCase();
+  }
+
+  Widget _monitorCard() {
+    final m = _monitors.isEmpty ? null : _monitors.first;
+    return Card(
+      margin: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: m == null
+              ? Theme.of(context).colorScheme.surfaceContainerHighest
+              : Theme.of(context).colorScheme.primaryContainer,
+          child: Icon(
+            Icons.star,
+            color: m == null
+                ? Theme.of(context).colorScheme.outline
+                : Theme.of(context).colorScheme.primary,
+          ),
+        ),
+        title: Text(m == null ? 'Староста не назначен' : m.fullName),
+        subtitle: Text(
+            m == null ? 'Из списка студентов группы' : 'Логин: ${m.login}'),
+        trailing: m == null
+            ? FilledButton.tonal(
+                onPressed: _students.isEmpty ? null : _promptMonitor,
+                child: const Text('Назначить'),
+              )
+            : IconButton(
+                icon: const Icon(Icons.delete_outline),
+                tooltip: 'Удалить старосту',
+                onPressed: () => _deleteMonitor(m),
+              ),
+        onTap: m == null && _students.isNotEmpty ? _promptMonitor : null,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -229,6 +421,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen> {
                           },
                         ),
                       ),
+                    _monitorCard(),
                     Expanded(
                       child: _students.isEmpty
                           ? const Center(

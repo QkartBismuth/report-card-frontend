@@ -389,6 +389,33 @@ class ApiService {
     return AdminGroup.fromJson(data as Map<String, dynamic>);
   }
 
+  // --------------- Admin: monitors ---------------
+
+  Future<List<MonitorInfo>> getMonitors({int? groupId}) async {
+    final data = await _request('GET', '/admin/monitors',
+        query: {'group_id': ?groupId?.toString()});
+    return (data as List)
+        .map((e) => MonitorInfo.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<MonitorInfo> createMonitor({
+    required int studentId,
+    required String login,
+    required String password,
+  }) async {
+    final data = await _request('POST', '/admin/monitors', body: {
+      'student_id': studentId,
+      'login': login,
+      'password': password,
+    });
+    return MonitorInfo.fromJson(data as Map<String, dynamic>);
+  }
+
+  Future<void> deleteMonitor(int monitorId) async {
+    await _request('DELETE', '/admin/monitors/$monitorId');
+  }
+
   // --------------- Admin: devices / errors ---------------
 
   Future<List<DeviceInfo>> getDevices() async {
