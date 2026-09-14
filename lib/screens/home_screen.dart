@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/app_update.dart';
 import '../models/group.dart';
 import '../services/api_service.dart';
+import '../services/update_service.dart';
 import '../state/app_state.dart';
 import 'admin/admin_screen.dart';
 import 'create_session_screen.dart';
@@ -25,6 +28,8 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Group> _groups = [];
   bool _loadingGroups = true;
   String? _error;
+  bool _updateDialogShown = false;
+  final ValueNotifier<double> _updateProgress = ValueNotifier(0);
 
   Future<void> _loadGroups() async {
     final state = context.read<AppState>();
@@ -62,6 +67,13 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _loadGroups();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkForUpdate());
+  }
+
+  @override
+  void dispose() {
+    _updateProgress.dispose();
+    super.dispose();
   }
 
   void _logout() {
@@ -70,6 +82,130 @@ class _HomeScreenState extends State<HomeScreen> {
       MaterialPageRoute(builder: (_) => const LoginScreen()),
       (route) => false,
     );
+  }
+
+  Future<void> _checkForUpdate({bool manual = false}) async {
+    if (!mounted || _updateDialogShown) return;
+    try {
+      final service = UpdateService();
+      final current = AppVersion.parse(await service.getCurrentVersion());
+      final latest = await service.fetchLatestRelease();
+      if (!mounted || latest == null) return;
+      if (!(AppVersion.parse(latest.version) > current)) {
+        if (manual) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Установлена последняя версия')),
+          );
+        }
+        return;
+      }
+      if (!manual) {
+        final prefs = await SharedPreferences.getInstance();
+        final skipped = prefs.getString('skip_update_version');
+        if (skipped == latest.version) return;
+      }
+      if (!mounted) return;
+      _showUpdateDialog(latest);
+    } catch (_) {}
+  }
+
+  void _showUpdateDialog(AppUpdate u) {
+    _updateDialogShown = true;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: Text('Доступно обновление v${u.version}'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (u.notes != null && u.notes!.trim().isNotEmpty)
+                Text(u.notes!,
+                    maxLines: 8, overflow: TextOverflow.ellipsis),
+              if (u.size > 0) ...[
+                const SizedBox(height: 8),
+                Text('Размер: ${(u.size / 1048576).toStringAsFixed(1)} МБ',
+                    style: Theme.of(context).textTheme.bodySmall),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              _updateDialogShown = false;
+              Navigator.of(ctx).pop();
+              _skipUpdate(u.version);
+            },
+            child: const Text('Позже'),
+          ),
+          FilledButton.icon(
+            onPressed: () {
+              _updateDialogShown = false;
+              Navigator.of(ctx).pop();
+              _startUpdate(u);
+            },
+            icon: const Icon(Icons.system_update_alt),
+            label: const Text('Обновить'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _skipUpdate(String version) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('skip_update_version', version);
+  }
+
+  Future<void> _startUpdate(AppUpdate u) async {
+    if (!mounted) return;
+    _updateDialogShown = true;
+    _updateProgress.value = 0;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Скачивание обновления'),
+        content: ValueListenableBuilder<double>(
+          valueListenable: _updateProgress,
+          builder: (ctx, progress, _) => Row(
+            children: [
+              Expanded(
+                child: LinearProgressIndicator(
+                  value: progress >= 1 ? null : progress,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(progress >= 1
+                  ? '100%'
+                  : '${(progress * 100).toStringAsFixed(0)}%'),
+            ],
+          ),
+        ),
+      ),
+    );
+    try {
+      final path = await UpdateService().downloadApk(
+        u,
+        onProgress: (recv, total) {
+          _updateProgress.value =
+              (total != null && total > 0) ? recv / total : 1;
+        },
+      );
+      if (mounted) Navigator.of(context, rootNavigator: true).pop();
+      await UpdateService.installApk(path);
+    } catch (e) {
+      if (mounted) Navigator.of(context, rootNavigator: true).pop();
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Ошибка обновления: $e')));
+      }
+    } finally {
+      _updateDialogShown = false;
+    }
   }
 
   @override
@@ -82,6 +218,11 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text('Главная'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.system_update_alt),
+            tooltip: 'Проверить обновление',
+            onPressed: () => _checkForUpdate(manual: true),
+          ),
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Выйти',
