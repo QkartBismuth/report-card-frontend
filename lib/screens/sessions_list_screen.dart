@@ -25,6 +25,7 @@ class _SessionsListScreenState extends State<SessionsListScreen> {
   DateTime? _to;
 
   bool get _isTeacher => context.read<AppState>().isTeacher;
+  bool get _isAdmin => context.read<AppState>().isAdmin;
 
   Future<void> _load() async {
     final state = context.read<AppState>();
@@ -99,6 +100,44 @@ class _SessionsListScreenState extends State<SessionsListScreen> {
     }
   }
 
+  Future<void> _deleteSession(SessionInfo s) async {
+    final api = context.read<AppState>().api;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Удалить пару?'),
+        content: Text(
+            'Пара ${s.pairNumber} — ${s.subjectName ?? '—'} (${s.groupName ?? ''}) '
+            'и все отметки будут удалены.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Удалить'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await api.deleteSession(s.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Пара удалена')));
+      _load();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final fmt = DateFormat('dd.MM.yyyy');
@@ -168,10 +207,13 @@ class _SessionsListScreenState extends State<SessionsListScreen> {
                                     itemCount: _sessions.length,
                                     itemBuilder: (ctx, i) {
                                       final s = _sessions[i];
+                                      final canDelete = _isAdmin || !s.confirmed;
                                       return _SessionCard(
                                         session: s,
                                         fmt: fmt,
                                         onTap: () => _open(s),
+                                        onDelete:
+                                            canDelete ? () => _deleteSession(s) : null,
                                       );
                                     },
                                   ),
@@ -250,10 +292,12 @@ class _SessionCard extends StatelessWidget {
   final SessionInfo session;
   final DateFormat fmt;
   final VoidCallback onTap;
+  final VoidCallback? onDelete;
   const _SessionCard({
     required this.session,
     required this.fmt,
     required this.onTap,
+    this.onDelete,
   });
 
   @override
@@ -275,19 +319,30 @@ class _SessionCard extends StatelessWidget {
         ),
         title: Text('Пара ${session.pairNumber} — ${session.subjectName ?? '—'}'),
         subtitle: Text('${fmt.format(session.date)} • ${session.groupName ?? ''}'),
-        trailing: Chip(
-          label: Text(
-            session.confirmed ? 'Подтверждена' : 'Не подтверждена',
-            style: TextStyle(
-              fontSize: 11,
-              color: session.confirmed
-                  ? scheme.onPrimaryContainer
-                  : scheme.onTertiaryContainer,
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Chip(
+              label: Text(
+                session.confirmed ? 'Подтверждена' : 'Не подтверждена',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: session.confirmed
+                      ? scheme.onPrimaryContainer
+                      : scheme.onTertiaryContainer,
+                ),
+              ),
+              backgroundColor: session.confirmed
+                  ? scheme.primaryContainer
+                  : scheme.tertiaryContainer,
             ),
-          ),
-          backgroundColor: session.confirmed
-              ? scheme.primaryContainer
-              : scheme.tertiaryContainer,
+            if (onDelete != null)
+              IconButton(
+                icon: const Icon(Icons.delete_outline),
+                tooltip: 'Удалить пару',
+                onPressed: onDelete,
+              ),
+          ],
         ),
         onTap: onTap,
       ),

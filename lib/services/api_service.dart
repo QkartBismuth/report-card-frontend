@@ -205,6 +205,10 @@ class ApiService {
     return SessionDetail.fromJson(data as Map<String, dynamic>);
   }
 
+  Future<void> deleteSession(int sessionId) async {
+    await _request('DELETE', '/sessions/$sessionId');
+  }
+
   // --------------- Upload raport ---------------
 
   Future<Map<String, dynamic>> uploadRaport(File file) async {
@@ -408,6 +412,20 @@ class ApiService {
       'student_id': studentId,
       'login': login,
       'password': password,
+    });
+    return MonitorInfo.fromJson(data as Map<String, dynamic>);
+  }
+
+  Future<MonitorInfo> updateMonitor(
+    int monitorId, {
+    int? studentId,
+    String? login,
+    String? password,
+  }) async {
+    final data = await _request('PATCH', '/admin/monitors/$monitorId', body: {
+      'student_id': ?studentId,
+      'login': ?login,
+      if (password != null && password.isNotEmpty) 'password': password,
     });
     return MonitorInfo.fromJson(data as Map<String, dynamic>);
   }

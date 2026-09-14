@@ -209,15 +209,17 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen> {
     }
   }
 
-  Future<void> _promptMonitor() async {
+  Future<void> _appointMonitor({MonitorInfo? existing}) async {
     if (_students.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Сначала добавьте студентов в группу'),
       ));
       return;
     }
-    Student? selected = _students.first;
-    final loginCtrl = TextEditingController(text: _slug(selected.fullName));
+    Student dropdownValue = _students.first;
+    int? newStudentId;
+    final loginCtrl =
+        TextEditingController(text: existing?.login ?? _slug(dropdownValue.fullName));
     final passCtrl = TextEditingController();
     final formKey = GlobalKey<FormState>();
 
@@ -226,7 +228,9 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen> {
       barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          title: const Text('Назначить старосту'),
+          title: Text(existing == null
+              ? 'Назначить старосту'
+              : 'Переназначить старосту'),
           content: Form(
             key: formKey,
             child: SingleChildScrollView(
@@ -234,7 +238,7 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   DropdownButtonFormField<Student>(
-                    initialValue: selected,
+                    initialValue: dropdownValue,
                     decoration: const InputDecoration(
                       labelText: 'Студент',
                       border: OutlineInputBorder(),
@@ -247,8 +251,11 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen> {
                         .toList(),
                     onChanged: (s) {
                       setDialogState(() {
-                        selected = s!;
-                        loginCtrl.text = _slug(s.fullName);
+                        dropdownValue = s!;
+                        newStudentId = s.id;
+                        if (existing == null) {
+                          loginCtrl.text = _slug(s.fullName);
+                        }
                       });
                     },
                   ),
@@ -267,13 +274,27 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen> {
                   TextFormField(
                     controller: passCtrl,
                     obscureText: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Пароль',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: existing == null
+                          ? 'Пароль'
+                          : 'Новый пароль (пусто — не менять)',
+                      border: const OutlineInputBorder(),
                     ),
-                    validator: (v) =>
-                        (v == null || v.isEmpty) ? 'Введите пароль' : null,
+                    validator: (v) {
+                      if (existing == null && (v == null || v.isEmpty)) {
+                        return 'Введите пароль';
+                      }
+                      return null;
+                    },
                   ),
+                  if (existing != null)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 8),
+                      child: Text(
+                        'Студент меняется только при выборе другого имени.',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -288,26 +309,37 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen> {
                 if (!(formKey.currentState?.validate() ?? false)) return;
                 Navigator.pop(ctx, true);
               },
-              child: const Text('Назначить'),
+              child: Text(existing == null ? 'Назначить' : 'Сохранить'),
             ),
           ],
         ),
       ),
     );
-    if (result != true || selected == null) return;
-    final chosen = selected!;
+    if (result != true) return;
     if (!mounted) return;
 
     final api = context.read<AppState>().api;
+    final login = loginCtrl.text.trim();
+    final password = passCtrl.text;
     try {
-      await api.createMonitor(
-        studentId: chosen.id,
-        login: loginCtrl.text.trim(),
-        password: passCtrl.text,
-      );
+      if (existing == null) {
+        await api.createMonitor(
+          studentId: dropdownValue.id,
+          login: login,
+          password: password,
+        );
+      } else {
+        await api.updateMonitor(
+          existing.id,
+          studentId: newStudentId,
+          login: login,
+          password: password,
+        );
+      }
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Староста назначен')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(existing == null ? 'Староста назначен' : 'Староста обновлён'),
+      ));
       await _loadStudents();
     } on ApiException catch (e) {
       if (!mounted) return;
@@ -379,15 +411,27 @@ class _AdminStudentsScreenState extends State<AdminStudentsScreen> {
             m == null ? 'Из списка студентов группы' : 'Логин: ${m.login}'),
         trailing: m == null
             ? FilledButton.tonal(
-                onPressed: _students.isEmpty ? null : _promptMonitor,
+                onPressed: _students.isEmpty ? null : () => _appointMonitor(),
                 child: const Text('Назначить'),
               )
-            : IconButton(
-                icon: const Icon(Icons.delete_outline),
-                tooltip: 'Удалить старосту',
-                onPressed: () => _deleteMonitor(m),
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.edit_outlined),
+                    tooltip: 'Переназначить / изменить логин и пароль',
+                    onPressed: () => _appointMonitor(existing: m),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline),
+                    tooltip: 'Удалить старосту',
+                    onPressed: () => _deleteMonitor(m),
+                  ),
+                ],
               ),
-        onTap: m == null && _students.isNotEmpty ? _promptMonitor : null,
+        onTap: m == null
+            ? (_students.isNotEmpty ? () => _appointMonitor() : null)
+            : () => _appointMonitor(existing: m),
       ),
     );
   }
