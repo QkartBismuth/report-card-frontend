@@ -136,11 +136,6 @@ class _LoginScreenState extends State<LoginScreen> {
                             : const Text('Войти'),
                       ),
                       const SizedBox(height: 16),
-                      Text(
-                        'Демо: староста  /  starosta123\nПреподаватель  /  teacher123',
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
                     ],
                   ),
                 ),

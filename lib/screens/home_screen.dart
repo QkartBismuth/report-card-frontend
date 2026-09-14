@@ -4,10 +4,12 @@ import 'package:provider/provider.dart';
 import '../models/group.dart';
 import '../services/api_service.dart';
 import '../state/app_state.dart';
+import 'admin/admin_screen.dart';
 import 'create_session_screen.dart';
 import 'disciplines_screen.dart';
 import 'export_screen.dart';
 import 'login_screen.dart';
+import 'schedule_screen.dart';
 import 'sessions_list_screen.dart';
 import 'students_screen.dart';
 import 'upload_raport_screen.dart';
@@ -74,6 +76,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
     final isTeacher = state.isTeacher;
+    final isAdmin = state.isAdmin;
 
     return Scaffold(
       appBar: AppBar(
@@ -95,8 +98,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     _UserCard(
                       name: state.user?.fullName ?? '',
-                      role: isTeacher ? 'Преподаватель' : 'Староста',
-                      showRole: isTeacher,
+                      role: isAdmin
+                          ? 'Администратор'
+                          : isTeacher
+                              ? 'Преподаватель'
+                              : 'Староста',
+                      showRole: true,
                     ),
                     const SizedBox(height: 16),
                     _GroupSelector(
@@ -105,6 +112,16 @@ class _HomeScreenState extends State<HomeScreen> {
                       onChanged: (g) => context.read<AppState>().setGroup(g),
                     ),
                     const SizedBox(height: 16),
+                    if (isAdmin)
+                      _MenuCard(
+                        icon: Icons.settings_applications_outlined,
+                        title: 'Администрирование',
+                        subtitle: 'Студенты, преподаватели, группы, устройства, подключение',
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const AdminScreen()),
+                        ),
+                      ),
                     if (isTeacher) ...[
                       _MenuCard(
                         icon: Icons.fact_check_outlined,
@@ -113,6 +130,15 @@ class _HomeScreenState extends State<HomeScreen> {
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(builder: (_) => const SessionsListScreen()),
+                        ),
+                      ),
+                      _MenuCard(
+                        icon: Icons.calendar_month_outlined,
+                        title: 'Расписание группы',
+                        subtitle: 'Расписание КТК (просмотр)',
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const ScheduleScreen()),
                         ),
                       ),
                       _MenuCard(
@@ -132,6 +158,15 @@ class _HomeScreenState extends State<HomeScreen> {
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(builder: (_) => const CreateSessionScreen()),
+                        ),
+                      ),
+                      _MenuCard(
+                        icon: Icons.calendar_month_outlined,
+                        title: 'Расписание',
+                        subtitle: 'Загрузить из КТК, поправить, создать пары на сегодня',
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const ScheduleScreen()),
                         ),
                       ),
                       _MenuCard(

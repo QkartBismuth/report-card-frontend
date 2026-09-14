@@ -4,7 +4,9 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 
 import '../config.dart';
+import '../models/admin.dart';
 import '../models/group.dart';
+import '../models/schedule.dart';
 import '../models/session.dart';
 import '../models/student.dart';
 import '../models/subject.dart';
@@ -19,12 +21,20 @@ class ApiException implements Exception {
 }
 
 class ApiService {
-  final String baseUrl;
+  String baseUrl;
   String? _token;
 
   ApiService({String? baseUrl}) : baseUrl = baseUrl ?? ApiConfig.baseUrl;
 
   void setToken(String? token) => _token = token;
+
+  void setBaseUrl(String url) {
+    var u = url.trim();
+    while (u.endsWith('/')) {
+      u = u.substring(0, u.length - 1);
+    }
+    if (u.isNotEmpty && u != baseUrl) baseUrl = u;
+  }
 
   Uri _uri(String path,
           [Map<String, dynamic>? query]) =>
@@ -112,6 +122,12 @@ class ApiService {
 
   Future<void> deleteStudent(int studentId) async {
     await _request('DELETE', '/students/$studentId');
+  }
+
+  Future<Student> renameStudent(int studentId, String fullName) async {
+    final data = await _request('PUT', '/students/$studentId',
+        body: {'full_name': fullName});
+    return Student.fromJson(data as Map<String, dynamic>);
   }
 
   // --------------- Subjects ---------------
@@ -272,6 +288,281 @@ class ApiService {
       } catch (_) {}
     }
     return 'raport.$format';
+  }
+
+  // --------------- Push config / telemetry ---------------
+
+  Future<PushConfig> getPushConfig() async {
+    final data = await _request('GET', '/push/config');
+    return PushConfig.fromJson(data as Map<String, dynamic>);
+  }
+
+  Future<void> registerDevice({
+    required String deviceId,
+    String platform = 'android',
+    String? model,
+    String? manufacturer,
+    String? osVersion,
+    String? appVersion,
+  }) async {
+    await _request('POST', '/analytics/device', body: {
+      'device_id': deviceId,
+      'platform': platform,
+      'model': model,
+      'manufacturer': manufacturer,
+      'os_version': osVersion,
+      'app_version': appVersion,
+    });
+  }
+
+  Future<void> reportError(RequestError error) async {
+    await _request('POST', '/analytics/error', body: {
+      'device_id': error.deviceId,
+      'app_version': error.appVersion,
+      'message': error.message,
+      'stack': error.stack,
+    });
+  }
+
+  // --------------- Admin: teachers ---------------
+
+  Future<List<TeacherInfo>> getTeachers() async {
+    final data = await _request('GET', '/admin/teachers');
+    return (data as List)
+        .map((e) => TeacherInfo.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<TeacherInfo> addTeacher({
+    required String login,
+    required String fullName,
+    required String password,
+  }) async {
+    final data = await _request('POST', '/admin/teachers', body: {
+      'login': login,
+      'full_name': fullName,
+      'password': password,
+    });
+    return TeacherInfo.fromJson(data as Map<String, dynamic>);
+  }
+
+  Future<TeacherInfo> updateTeacher(
+    int teacherId, {
+    String? login,
+    String? fullName,
+    String? password,
+  }) async {
+    final body = <String, dynamic>{
+      'login': ?login,
+      'full_name': ?fullName,
+      if (password != null && password.isNotEmpty) 'password': password,
+    };
+    final data = await _request('PATCH', '/admin/teachers/$teacherId', body: body);
+    return TeacherInfo.fromJson(data as Map<String, dynamic>);
+  }
+
+  Future<void> deleteTeacher(int teacherId) async {
+    await _request('DELETE', '/admin/teachers/$teacherId');
+  }
+
+  // --------------- Admin: groups / curators ---------------
+
+  Future<AdminGroup> addGroup(String name, {int? year}) async {
+    final data = await _request('POST', '/admin/groups',
+        body: {'name': name, 'year': ?year});
+    return AdminGroup.fromJson(data as Map<String, dynamic>);
+  }
+
+  Future<AdminGroup> updateGroup(
+    int groupId, {
+    String? name,
+    int? year,
+    int? curatorId,
+    bool clearCurator = false,
+  }) async {
+    final body = <String, dynamic>{
+      'name': ?name,
+      'year': ?year,
+      if (clearCurator) 'curator_id': null else 'curator_id': ?curatorId,
+    };
+    final data = await _request('PATCH', '/admin/groups/$groupId', body: body);
+    return AdminGroup.fromJson(data as Map<String, dynamic>);
+  }
+
+  // --------------- Admin: devices / errors ---------------
+
+  Future<List<DeviceInfo>> getDevices() async {
+    final data = await _request('GET', '/admin/devices');
+    return (data as List)
+        .map((e) => DeviceInfo.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<void> deleteDevice(int deviceId) async {
+    await _request('DELETE', '/admin/devices/$deviceId');
+  }
+
+  Future<int> clearDevices() async {
+    final data = await _request('DELETE', '/admin/devices');
+    return (data as Map<String, dynamic>)['deleted'] ?? 0;
+  }
+
+  Future<List<ErrorInfo>> getErrors() async {
+    final data = await _request('GET', '/admin/errors');
+    return (data as List)
+        .map((e) => ErrorInfo.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<void> deleteError(int errorId) async {
+    await _request('DELETE', '/admin/errors/$errorId');
+  }
+
+  Future<int> clearErrors() async {
+    final data = await _request('DELETE', '/admin/errors');
+    return (data as Map<String, dynamic>)['deleted'] ?? 0;
+  }
+
+  // --------------- Admin: connection config ---------------
+
+  Future<ServerConfig> getServerConfig() async {
+    final data = await _request('GET', '/admin/config');
+    return ServerConfig.fromJson(data as Map<String, dynamic>);
+  }
+
+  Future<ServerConfig> updateServerConfig({
+    String? serverUrl,
+    String? wifiSsid,
+    String? wifiPassword,
+  }) async {
+    final body = <String, dynamic>{
+      'server_url': ?serverUrl,
+      'wifi_ssid': ?wifiSsid,
+      'wifi_password': ?wifiPassword,
+    };
+    final data = await _request('POST', '/admin/config', body: body);
+    return ServerConfig.fromJson(data as Map<String, dynamic>);
+  }
+
+  // --------------- Admin: tunnel ---------------
+
+  Future<TunnelStatus> tunnelStatus() async {
+    final data = await _request('GET', '/admin/tunnel/status');
+    return TunnelStatus.fromJson(data as Map<String, dynamic>);
+  }
+
+  Future<TunnelStatus> tunnelStart(String provider, {String? token}) async {
+    final data = await _request('POST', '/admin/tunnel/start',
+        body: {'provider': provider, 'token': ?token});
+    return TunnelStatus.fromJson(data as Map<String, dynamic>);
+  }
+
+  Future<TunnelStatus> tunnelStop() async {
+    final data = await _request('POST', '/admin/tunnel/stop');
+    return TunnelStatus.fromJson(data as Map<String, dynamic>);
+  }
+
+  Future<Map<String, dynamic>> tunnelSendUrl() async {
+    final data = await _request('POST', '/admin/tunnel/send-url');
+    return data as Map<String, dynamic>;
+  }
+
+  // --------------- KTC (прокси через сервер) ---------------
+
+  Future<List<KtcBranch>> getKtcBranches() async {
+    final data = await _request('GET', '/ktc/branches');
+    return (data as List)
+        .map((e) => KtcBranch.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<List<KtcCourse>> getKtcCourses(int branchId) async {
+    final data = await _request('GET', '/ktc/courses/$branchId');
+    return (data as List)
+        .map((e) => KtcCourse.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  // --------------- Расписание ---------------
+
+  Future<List<ScheduleEntry>> getSchedule(int groupId) async {
+    final data = await _request('GET', '/schedule/$groupId');
+    return (data as List)
+        .map((e) => ScheduleEntry.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<void> setScheduleSource(int groupId,
+      {int? ktcBranchId, int? ktcGroupId}) async {
+    await _request('PUT', '/schedule/$groupId/source', body: {
+      'ktc_branch_id': ?ktcBranchId,
+      'ktc_group_id': ?ktcGroupId,
+    });
+  }
+
+  Future<Map<String, dynamic>> importSchedule(int groupId,
+      {int? week, bool replace = false}) async {
+    final data = await _request('POST', '/schedule/$groupId/import',
+        body: {'week': ?week, 'replace': replace});
+    return data as Map<String, dynamic>;
+  }
+
+  Future<ScheduleEntry> addScheduleEntry(
+    int groupId, {
+    required int dayOfWeek,
+    required int pairNumber,
+    int? subjectId,
+    String? subjectName,
+    String? teacherName,
+    String? classroom,
+    bool cancelled = false,
+  }) async {
+    final data = await _request('POST', '/schedule/$groupId/entries', body: {
+      'day_of_week': dayOfWeek,
+      'pair_number': pairNumber,
+      'subject_id': ?subjectId,
+      'subject_name': ?subjectName,
+      'teacher_name': ?teacherName,
+      'classroom': ?classroom,
+      'cancelled': cancelled,
+    });
+    return ScheduleEntry.fromJson(data as Map<String, dynamic>);
+  }
+
+  Future<ScheduleEntry> updateScheduleEntry(
+    int entryId, {
+    int? dayOfWeek,
+    int? pairNumber,
+    int? subjectId,
+    String? subjectName,
+    String? teacherName,
+    String? classroom,
+    bool? cancelled,
+  }) async {
+    final data = await _request('PATCH', '/schedule/$entryId', body: {
+      'day_of_week': ?dayOfWeek,
+      'pair_number': ?pairNumber,
+      'subject_id': ?subjectId,
+      'subject_name': ?subjectName,
+      'teacher_name': ?teacherName,
+      'classroom': ?classroom,
+      'cancelled': ?cancelled,
+    });
+    return ScheduleEntry.fromJson(data as Map<String, dynamic>);
+  }
+
+  Future<void> deleteScheduleEntry(int entryId) async {
+    await _request('DELETE', '/schedule/$entryId');
+  }
+
+  Future<CreateSessionsResult> createSessionsFromSchedule(
+    int groupId, {
+    required DateTime date,
+    String mode = 'missing',
+  }) async {
+    final data = await _request('POST', '/schedule/$groupId/create-sessions',
+        body: {'date': _fmtDate(date), 'mode': mode});
+    return CreateSessionsResult.fromJson(data as Map<String, dynamic>);
   }
 
   static String _fmtDate(DateTime d) {

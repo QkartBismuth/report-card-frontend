@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -10,8 +12,21 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final state = AppState();
   await state.init();
+  _initErrorHandlers(state);
   final theme = await ThemeController.create();
   runApp(ReportCardApp(state: state, themeCtrl: theme));
+}
+
+void _initErrorHandlers(AppState state) {
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    state.reportError(
+        'Flutter: ${details.exceptionAsString()}', details.stack?.toString());
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    state.reportError('Platform: $error', stack.toString());
+    return true;
+  };
 }
 
 class ReportCardApp extends StatelessWidget {
