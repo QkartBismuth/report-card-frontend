@@ -33,6 +33,7 @@ class AppState extends ChangeNotifier {
   bool get isTeacher => user?.isTeacher ?? false;
   bool get isMonitor => user?.isMonitor ?? false;
   bool get isAdmin => user?.isAdmin ?? false;
+  bool get isDepartmentHead => user?.isDepartmentHead ?? false;
   Group? get group => activeGroup;
   int get groupId => activeGroup?.id ?? -1;
   String get baseUrl => api.baseUrl;

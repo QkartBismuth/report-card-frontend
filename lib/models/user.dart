@@ -24,4 +24,5 @@ class AppUser {
   bool get isTeacher => role == 'teacher';
   bool get isMonitor => role == 'monitor';
   bool get isAdmin => role == 'admin';
+  bool get isDepartmentHead => role == 'department_head';
 }

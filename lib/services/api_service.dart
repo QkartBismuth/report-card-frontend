@@ -187,10 +187,16 @@ class ApiService {
     return SessionInfo.fromJson(data as Map<String, dynamic>);
   }
 
-  Future<void> updateRecords(int sessionId, Map<int, String> marks) async {
-    final records = marks.entries
-        .map((e) => {'student_id': e.key, 'mark': e.value})
-        .toList();
+  Future<void> updateRecords(int sessionId, Map<int, String> marks,
+      {Map<int, String?>? comments}) async {
+    final news = comments ?? const {};
+    final records = marks.entries.map((e) {
+      return <String, dynamic>{
+        'student_id': e.key,
+        'mark': e.value,
+        if (news.containsKey(e.key)) 'comment': news[e.key],
+      };
+    }).toList();
     await _request('PUT', '/sessions/$sessionId/records',
         body: {'records': records});
   }
@@ -369,6 +375,49 @@ class ApiService {
     await _request('DELETE', '/admin/teachers/$teacherId');
   }
 
+  // --------------- Admin: department heads ---------------
+
+  Future<List<DepartmentHeadInfo>> getDepartmentHeads() async {
+    final data = await _request('GET', '/admin/department_heads');
+    return (data as List)
+        .map((e) => DepartmentHeadInfo.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<DepartmentHeadInfo> addDepartmentHead({
+    required String login,
+    required String fullName,
+    required String password,
+  }) async {
+    final data = await _request('POST', '/admin/department_heads', body: {
+      'login': login,
+      'full_name': fullName,
+      'password': password,
+    });
+    return DepartmentHeadInfo.fromJson(data as Map<String, dynamic>);
+  }
+
+  Future<DepartmentHeadInfo> updateDepartmentHead(
+    int departmentHeadId, {
+    String? login,
+    String? fullName,
+    String? password,
+  }) async {
+    final body = <String, dynamic>{
+      'login': ?login,
+      'full_name': ?fullName,
+      if (password != null && password.isNotEmpty) 'password': password,
+    };
+    final data = await _request(
+        'PATCH', '/admin/department_heads/$departmentHeadId',
+        body: body);
+    return DepartmentHeadInfo.fromJson(data as Map<String, dynamic>);
+  }
+
+  Future<void> deleteDepartmentHead(int departmentHeadId) async {
+    await _request('DELETE', '/admin/department_heads/$departmentHeadId');
+  }
+
   // --------------- Admin: groups / curators ---------------
 
   Future<AdminGroup> addGroup(String name, {int? year}) async {
@@ -383,11 +432,17 @@ class ApiService {
     int? year,
     int? curatorId,
     bool clearCurator = false,
+    int? departmentHeadId,
+    bool clearDepartmentHead = false,
   }) async {
     final body = <String, dynamic>{
       'name': ?name,
       'year': ?year,
       if (clearCurator) 'curator_id': null else 'curator_id': ?curatorId,
+      if (clearDepartmentHead)
+        'department_head_id': null
+      else
+        'department_head_id': ?departmentHeadId,
     };
     final data = await _request('PATCH', '/admin/groups/$groupId', body: body);
     return AdminGroup.fromJson(data as Map<String, dynamic>);

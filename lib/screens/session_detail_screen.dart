@@ -9,6 +9,7 @@ import '../models/session.dart';
 import '../models/student.dart';
 import '../services/api_service.dart';
 import '../state/app_state.dart';
+import 'attendance_screen.dart';
 
 class SessionDetailScreen extends StatefulWidget {
   final int sessionId;
@@ -133,11 +134,27 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
     final session = _detail?.session;
     final fmt = DateFormat('dd.MM.yyyy');
     final scheme = Theme.of(context).colorScheme;
+    final isTeacher = context.read<AppState>().isTeacher;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Сессия'),
         actions: [
+          if (isTeacher && session != null && !session.confirmed)
+            IconButton(
+              tooltip: 'Изменить отметки',
+              icon: const Icon(Icons.edit),
+              onPressed: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        AttendanceScreen(sessionId: session.id),
+                  ),
+                );
+                await _load();
+              },
+            ),
           if (_detail != null)
             IconButton(
               tooltip: 'Выгрузить',
@@ -187,11 +204,15 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
                                         DateFormat('dd.MM.yyyy HH:mm')
                                             .format(session.confirmedAt!.toLocal())}')
                                 : null,
-                            trailing: FilledButton.tonal(
-                              onPressed: () => _toggleConfirm(_detail!),
-                              child: Text(
-                                  session.confirmed ? 'Снять' : 'Подтвердить'),
-                            ),
+                            trailing: isTeacher
+                                ? FilledButton.tonal(
+                                    onPressed: () =>
+                                        _toggleConfirm(_detail!),
+                                    child: Text(session.confirmed
+                                        ? 'Снять'
+                                        : 'Подтвердить'),
+                                  )
+                                : null,
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -213,31 +234,61 @@ class _SessionDetailScreenState extends State<SessionDetailScreen> {
     final marksByStudent = {
       for (final r in _detail!.records) r.studentId: r.mark,
     };
+    final commentsByStudent = {
+      for (final r in _detail!.records)
+        if (r.comment != null) r.studentId: r.comment!,
+    };
     return _students.map((st) {
         final mark = Marks.byValue(marksByStudent[st.id] ?? 'present');
+        final comment = commentsByStudent[st.id];
         return Card(
           elevation: 0,
           margin: const EdgeInsets.symmetric(vertical: 3),
-          child: ListTile(
-            title: Text(st.fullName),
-            trailing: Container(
-              width: 48,
-              height: 36,
-              decoration: BoxDecoration(
-                color: mark.color.withValues(alpha: 0.15),
-                border: Border.all(color: mark.color),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              alignment: Alignment.center,
-              child: Text(
-                mark.label,
-                style: TextStyle(
-                  color: mark.color,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+          child: Column(
+            children: [
+              ListTile(
+                title: Text(st.fullName),
+                trailing: Container(
+                  width: 48,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: mark.color.withValues(alpha: 0.15),
+                    border: Border.all(color: mark.color),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    mark.label,
+                    style: TextStyle(
+                      color: mark.color,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
               ),
-            ),
+              if (comment != null)
+                Padding(
+                  padding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.comment,
+                          size: 14, color: scheme.onSurfaceVariant),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          comment,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
           ),
         );
       }).toList();

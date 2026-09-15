@@ -41,12 +41,14 @@ class RecordInfo {
   final int sessionId;
   final int studentId;
   final String mark;
+  final String? comment;
 
   RecordInfo({
     required this.id,
     required this.sessionId,
     required this.studentId,
     required this.mark,
+    this.comment,
   });
 
   factory RecordInfo.fromJson(Map<String, dynamic> json) => RecordInfo(
@@ -54,6 +56,7 @@ class RecordInfo {
         sessionId: json['session_id'],
         studentId: json['student_id'],
         mark: json['mark'],
+        comment: json['comment'],
       );
 }
 

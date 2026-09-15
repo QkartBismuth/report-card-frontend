@@ -24,14 +24,20 @@ class Marks {
   static const late = Mark(
     value: 'late',
     label: 'н',
-    color: Color(0xFFFFB300),
+    color: Color(0xFFFB8C00),
+    tooltip: 'Не был',
+  );
+  static const o = Mark(
+    value: 'o',
+    label: 'о',
+    color: Color(0xFFFF7043),
     tooltip: 'Опоздание',
   );
   static const absent = Mark(
     value: 'absent',
     label: 'нн',
     color: Color(0xFFE53935),
-    tooltip: 'Не пришёл',
+    tooltip: 'Неуважительная причина',
   );
   static const excused = Mark(
     value: 'excused',
@@ -40,14 +46,14 @@ class Marks {
     tooltip: 'Уважительная причина',
   );
 
-  static const all = [present, late, absent, excused];
+  static const all = [present, late, o, absent, excused];
 
   static Mark byValue(String value) => all.firstWhere(
         (m) => m.value == value,
         orElse: () => present,
       );
 
-  /// Следующее состояние при нажатии: present -> late -> absent -> excused -> present
+  /// Следующее состояние при нажатии: present -> late -> о -> absent -> excused -> present
   static Mark next(Mark current) {
     final idx = all.indexOf(current);
     return all[(idx + 1) % all.length];

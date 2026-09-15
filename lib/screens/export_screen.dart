@@ -34,7 +34,9 @@ class _ExportScreenState extends State<ExportScreen> {
 
   int get _groupId => context.read<AppState>().groupId;
 
-  bool get _isTeacher => context.read<AppState>().isTeacher;
+  bool get _isTeacher =>
+      context.read<AppState>().isTeacher ||
+      context.read<AppState>().isDepartmentHead;
 
   Future<void> _loadSessions() async {
     setState(() {

@@ -15,6 +15,7 @@ class AdminGroupsScreen extends StatefulWidget {
 class _AdminGroupsScreenState extends State<AdminGroupsScreen> {
   List<AdminGroup> _groups = [];
   List<TeacherInfo> _teachers = [];
+  List<DepartmentHeadInfo> _heads = [];
   bool _loading = true;
   String? _error;
 
@@ -33,6 +34,7 @@ class _AdminGroupsScreenState extends State<AdminGroupsScreen> {
     try {
       final groups = await api.getGroups();
       final teachers = await api.getTeachers();
+      final heads = await api.getDepartmentHeads();
       if (!mounted) return;
       setState(() {
         _groups = groups
@@ -42,9 +44,12 @@ class _AdminGroupsScreenState extends State<AdminGroupsScreen> {
                   year: g.year,
                   curatorId: g.curatorId,
                   curatorName: g.curatorName,
+                  departmentHeadId: g.departmentHeadId,
+                  departmentHeadName: g.departmentHeadName,
                 ))
             .toList();
         _teachers = teachers;
+        _heads = heads;
         _loading = false;
       });
     } on ApiException catch (e) {
@@ -119,12 +124,14 @@ class _AdminGroupsScreenState extends State<AdminGroupsScreen> {
     final api = context.read<AppState>().api;
     TextEditingController? nameCtrl;
     TextEditingController? yearCtrl;
-    final result = await showDialog<({String? name, int? year, int? curatorId, bool clear})>(
+    final result = await showDialog<
+        ({String? name, int? year, int? curatorId, int? departmentHeadId})>(
       context: context,
       builder: (ctx) {
         nameCtrl = TextEditingController(text: g.name);
         yearCtrl = TextEditingController(text: g.year?.toString() ?? '');
         var curatorId = g.curatorId;
+        var departmentHeadId = g.departmentHeadId;
         return StatefulBuilder(
           builder: (ctx, setDialogState) => AlertDialog(
             title: const Text('Изменить группу'),
@@ -162,6 +169,27 @@ class _AdminGroupsScreenState extends State<AdminGroupsScreen> {
                     ],
                     onChanged: (v) => setDialogState(() => curatorId = v),
                   ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<int?>(
+                    initialValue: departmentHeadId,
+                    decoration: const InputDecoration(
+                      labelText: 'Завотделения',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: [
+                      const DropdownMenuItem<int?>(
+                        value: null,
+                        child: Text('— без завотделения —'),
+                      ),
+                      for (final h in _heads)
+                        DropdownMenuItem<int?>(
+                          value: h.id,
+                          child: Text(h.fullName),
+                        ),
+                    ],
+                    onChanged: (v) =>
+                        setDialogState(() => departmentHeadId = v),
+                  ),
                 ],
               ),
             ),
@@ -177,7 +205,7 @@ class _AdminGroupsScreenState extends State<AdminGroupsScreen> {
                     name: nameCtrl!.text.trim(),
                     year: int.tryParse(yearCtrl!.text.trim()),
                     curatorId: curatorId,
-                    clear: false,
+                    departmentHeadId: departmentHeadId,
                   ),
                 ),
                 child: const Text('Сохранить'),
@@ -195,6 +223,9 @@ class _AdminGroupsScreenState extends State<AdminGroupsScreen> {
         year: result.year ?? g.year,
         curatorId: result.curatorId,
         clearCurator: result.curatorId == null && g.curatorId != null,
+        departmentHeadId: result.departmentHeadId,
+        clearDepartmentHead:
+            result.departmentHeadId == null && g.departmentHeadId != null,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context)
@@ -210,7 +241,7 @@ class _AdminGroupsScreenState extends State<AdminGroupsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Группы и кураторы')),
+      appBar: AppBar(title: const Text('Группы, кураторы, завотделения')),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
@@ -225,36 +256,64 @@ class _AdminGroupsScreenState extends State<AdminGroupsScreen> {
                             (t) => t.id == g.curatorId);
                         final curator =
                             curIdx >= 0 ? _teachers[curIdx] : null;
+                        final headIdx = _heads.indexWhere(
+                            (h) => h.id == g.departmentHeadId);
+                        final head =
+                            headIdx >= 0 ? _heads[headIdx] : null;
                         return Card(
                           margin: const EdgeInsets.symmetric(
                               horizontal: 16, vertical: 6),
-                          child: ListTile(
-                            title: Text(g.name,
-                                style: const TextStyle(fontWeight: FontWeight.w600)),
-                            subtitle: Text(
-                              g.year != null ? 'Год: ${g.year}' : '',
-                            ),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Chip(
-                                  label: Text(
-                                    curator?.fullName ?? 'Нет куратора',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: curator == null
-                                          ? Theme.of(context).disabledColor
-                                          : null,
-                                    ),
-                                  ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              ListTile(
+                                title: Text(g.name,
+                                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                                subtitle: Text(
+                                  g.year != null ? 'Год: ${g.year}' : '',
                                 ),
-                                IconButton(
+                                trailing: IconButton(
                                   icon: const Icon(Icons.edit_outlined),
                                   tooltip: 'Изменить',
                                   onPressed: () => _editGroup(g),
                                 ),
-                              ],
-                            ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                                child: Wrap(
+                                  spacing: 8,
+                                  runSpacing: 6,
+                                  children: [
+                                    Chip(
+                                      avatar: const Icon(Icons.person_outline, size: 16),
+                                      label: Text(
+                                        curator?.fullName ?? 'Нет куратора',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: curator == null
+                                              ? Theme.of(context).disabledColor
+                                              : null,
+                                        ),
+                                      ),
+                                      visualDensity: VisualDensity.compact,
+                                    ),
+                                    Chip(
+                                      avatar: const Icon(Icons.manage_accounts_outlined, size: 16),
+                                      label: Text(
+                                        head?.fullName ?? 'Нет завотделения',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: head == null
+                                              ? Theme.of(context).disabledColor
+                                              : null,
+                                        ),
+                                      ),
+                                      visualDensity: VisualDensity.compact,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
                         );
                       },

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'admin_connection_screen.dart';
+import 'admin_department_heads_screen.dart';
 import 'admin_devices_screen.dart';
 import 'admin_errors_screen.dart';
 import 'admin_groups_screen.dart';
@@ -37,11 +38,21 @@ class AdminScreen extends StatelessWidget {
           ),
           _AdminCard(
             icon: Icons.groups_outlined,
-            title: 'Группы и кураторы',
-            subtitle: 'Создание групп, назначение куратора',
+            title: 'Группы, кураторы, завотделения',
+            subtitle: 'Создание групп, назначение куратора и завотделения',
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const AdminGroupsScreen()),
+            ),
+          ),
+          _AdminCard(
+            icon: Icons.manage_accounts_outlined,
+            title: 'Завотделения',
+            subtitle: 'Учётные записи заведующих отделениями',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (_) => const AdminDepartmentHeadsScreen()),
             ),
           ),
           _AdminCard(

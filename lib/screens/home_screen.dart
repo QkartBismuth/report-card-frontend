@@ -213,6 +213,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final state = context.watch<AppState>();
     final isTeacher = state.isTeacher;
     final isAdmin = state.isAdmin;
+    final isDepartmentHead = state.isDepartmentHead;
 
     return Scaffold(
       appBar: AppBar(
@@ -243,7 +244,9 @@ class _HomeScreenState extends State<HomeScreen> {
                           ? 'Администратор'
                           : isTeacher
                               ? 'Преподаватель'
-                              : 'Староста',
+                              : isDepartmentHead
+                                  ? 'Завотделения'
+                                  : 'Староста',
                       showRole: true,
                     ),
                     const SizedBox(height: 16),
@@ -263,11 +266,11 @@ class _HomeScreenState extends State<HomeScreen> {
                           MaterialPageRoute(builder: (_) => const AdminScreen()),
                         ),
                       ),
-                    if (isTeacher) ...[
+                    if (isTeacher || isDepartmentHead) ...[
                       _MenuCard(
                         icon: Icons.fact_check_outlined,
-                        title: 'Сессии и подтверждение',
-                        subtitle: 'Просмотр посещаемости, подтверждение подлинности',
+                        title: 'Сессии',
+                        subtitle: 'Просмотр посещаемости по группам',
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(builder: (_) => const SessionsListScreen()),

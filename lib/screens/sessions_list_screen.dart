@@ -24,7 +24,9 @@ class _SessionsListScreenState extends State<SessionsListScreen> {
   DateTime? _from;
   DateTime? _to;
 
-  bool get _isTeacher => context.read<AppState>().isTeacher;
+  bool get _isTeacher =>
+      context.read<AppState>().isTeacher ||
+      context.read<AppState>().isDepartmentHead;
   bool get _isAdmin => context.read<AppState>().isAdmin;
 
   Future<void> _load() async {

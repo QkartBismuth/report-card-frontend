@@ -25,6 +25,8 @@ class AdminGroup {
   final int? year;
   final int? curatorId;
   final String? curatorName;
+  final int? departmentHeadId;
+  final String? departmentHeadName;
 
   AdminGroup({
     required this.id,
@@ -32,6 +34,8 @@ class AdminGroup {
     this.year,
     this.curatorId,
     this.curatorName,
+    this.departmentHeadId,
+    this.departmentHeadName,
   });
 
   factory AdminGroup.fromJson(Map<String, dynamic> json) => AdminGroup(
@@ -40,6 +44,27 @@ class AdminGroup {
         year: json['year'],
         curatorId: json['curator_id'] ?? json['teacher_id'],
         curatorName: json['curator_name'],
+        departmentHeadId: json['department_head_id'],
+        departmentHeadName: json['department_head_name'],
+      );
+}
+
+class DepartmentHeadInfo {
+  final int id;
+  final String login;
+  final String fullName;
+
+  DepartmentHeadInfo({
+    required this.id,
+    required this.login,
+    required this.fullName,
+  });
+
+  factory DepartmentHeadInfo.fromJson(Map<String, dynamic> json) =>
+      DepartmentHeadInfo(
+        id: json['id'],
+        login: json['login'] ?? '',
+        fullName: json['full_name'] ?? '',
       );
 }
 

@@ -21,6 +21,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   SessionDetail? _detail;
   List<Student> _students = [];
   Map<int, String> _marks = {};
+  Map<int, String> _comments = {};
   bool _loading = true;
   bool _saving = false;
   String? _error;
@@ -44,6 +45,10 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         _marks = {
           for (final r in detail.records) r.studentId: r.mark,
         };
+        _comments = {
+          for (final r in detail.records)
+            if (r.comment != null) r.studentId: r.comment!,
+        };
         _loading = false;
       });
     } on ApiException catch (e) {
@@ -58,7 +63,15 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   Future<void> _save() async {
     setState(() => _saving = true);
     try {
-      await context.read<AppState>().api.updateRecords(widget.sessionId, _marks);
+      final comments = <int, String?>{
+        for (final st in _students)
+          if (_marks[st.id] != 'present')
+            st.id: (_comments[st.id]?.trim().isEmpty ?? true)
+                ? null
+                : _comments[st.id]!.trim(),
+      };
+      await context.read<AppState>().api
+          .updateRecords(widget.sessionId, _marks, comments: comments);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Посещаемость сохранена')),
@@ -129,19 +142,37 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                         itemCount: _students.length,
                         itemBuilder: (ctx, i) {
                           final st = _students[i];
-                          return StudentMarkTile(
-                            index: i,
-                            fullName: st.fullName,
-                            mark: _marks[st.id] ?? 'present',
-                            onNext: session.confirmed
-                                ? null
-                                : () {
-                                    setState(() {
-                                      final current =
-                                          Marks.byValue(_marks[st.id] ?? 'present');
-                                      _marks[st.id] = Marks.next(current).value;
-                                    });
-                                  },
+                          final mark = _marks[st.id] ?? 'present';
+                          return Column(
+                            children: [
+                              StudentMarkTile(
+                                index: i,
+                                fullName: st.fullName,
+                                mark: mark,
+                                onNext: session.confirmed
+                                    ? null
+                                    : () {
+                                        setState(() {
+                                          final current = Marks.byValue(mark);
+                                          _marks[st.id] =
+                                              Marks.next(current).value;
+                                        });
+                                      },
+                              ),
+                              if (mark != 'present')
+                                _CommentField(
+                                  value:
+                                      _comments[st.id] ?? '',
+                                  readOnly: session.confirmed,
+                                  onChanged: (v) => setState(() {
+                                    if (v.isEmpty) {
+                                      _comments.remove(st.id);
+                                    } else {
+                                      _comments[st.id] = v;
+                                    }
+                                  }),
+                                ),
+                            ],
                           );
                         },
                       ),
@@ -221,6 +252,52 @@ class _Legend extends StatelessWidget {
               ],
             ),
         ],
+      ),
+    );
+  }
+}
+
+class _CommentField extends StatelessWidget {
+  final String value;
+  final bool readOnly;
+  final ValueChanged<String> onChanged;
+
+  const _CommentField({
+    required this.value,
+    required this.readOnly,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final hint = value.isEmpty
+        ? 'Произвольная отметка / причина...'
+        : value;
+    return Padding(
+      padding: const EdgeInsets.only(left: 64, right: 12, bottom: 8),
+      child: TextField(
+        readOnly: readOnly,
+        enabled: !readOnly,
+        style: const TextStyle(fontSize: 13),
+        maxLines: 2,
+        minLines: 1,
+        decoration: InputDecoration(
+          isDense: true,
+          hintText: readOnly && value.isEmpty ? null : hint,
+          prefixIcon: const Icon(Icons.comment, size: 16),
+          prefixIconConstraints:
+              const BoxConstraints(minWidth: 32, minHeight: 24),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(width: 1),
+          ),
+          filled: true,
+          fillColor: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        ),
+        onChanged: readOnly ? null : onChanged,
       ),
     );
   }
