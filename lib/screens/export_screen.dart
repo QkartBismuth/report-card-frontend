@@ -17,12 +17,13 @@ class ExportScreen extends StatefulWidget {
 }
 
 class _ExportScreenState extends State<ExportScreen> {
-  bool _singleMode = true;
+  String _mode = 'day'; // 'day' | 'period' | 'month'
   String _format = 'pdf';
   DateTime? _from;
   DateTime? _to;
   SessionInfo? _selected;
   DateTime? _selectedDay;
+  DateTime? _selectedMonth;
   List<SessionInfo> _sessions = [];
   bool _downloading = false;
   String? _error;
@@ -37,6 +38,16 @@ class _ExportScreenState extends State<ExportScreen> {
   bool get _isTeacher =>
       context.read<AppState>().isTeacher ||
       context.read<AppState>().isDepartmentHead;
+
+  static const _monthsRu = [
+    'январь', 'февраль', 'март', 'апрель', 'май', 'июнь',
+    'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь',
+  ];
+
+  String _monthLabel(DateTime d) {
+    final m = _monthsRu[d.month - 1];
+    return '${m[0].toUpperCase()}${m.substring(1)} ${d.year}';
+  }
 
   Future<void> _loadSessions() async {
     setState(() {
@@ -182,6 +193,20 @@ class _ExportScreenState extends State<ExportScreen> {
     if (d != null) setState(() => _to = d);
   }
 
+  Future<void> _pickMonth() async {
+    final now = DateTime.now();
+    final initial = _selectedMonth ?? DateTime(now.year, now.month);
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(2024, 1),
+      lastDate: DateTime(2035, 12),
+    );
+    if (picked != null) {
+      setState(() => _selectedMonth = DateTime(picked.year, picked.month));
+    }
+  }
+
   Future<void> _download() async {
     final api = context.read<AppState>().api;
     setState(() {
@@ -191,7 +216,17 @@ class _ExportScreenState extends State<ExportScreen> {
     try {
       final dir = (await getApplicationDocumentsDirectory()).path;
       final String path;
-      if (_singleMode) {
+      if (_mode == 'month') {
+        if (_selectedMonth == null) {
+          throw ApiException(0, 'Выберите месяц');
+        }
+        path = await api.exportMonthGroup(
+          _groupId,
+          year: _selectedMonth!.year,
+          month: _selectedMonth!.month,
+          saveDir: dir,
+        );
+      } else if (_mode == 'day') {
         if (_isTeacher) {
           if (_selectedDay == null) {
             throw ApiException(0, 'Выберите день');
@@ -258,25 +293,30 @@ class _ExportScreenState extends State<ExportScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          SegmentedButton<bool>(
+          SegmentedButton<String>(
             segments: [
               ButtonSegment(
-                value: true,
+                value: 'day',
                 label: Text(_isTeacher ? 'Один день' : 'Одна сессия'),
                 icon: const Icon(Icons.looks_one),
               ),
-              ButtonSegment(
-                value: false,
-                label: const Text('Период'),
-                icon: const Icon(Icons.date_range),
+              const ButtonSegment(
+                value: 'period',
+                label: Text('Период'),
+                icon: Icon(Icons.date_range),
+              ),
+              const ButtonSegment(
+                value: 'month',
+                label: Text('Месяц'),
+                icon: Icon(Icons.calendar_month),
               ),
             ],
-            selected: {_singleMode},
+            selected: {_mode},
             onSelectionChanged: (s) =>
-                setState(() => _singleMode = s.first),
+                setState(() => _mode = s.first),
           ),
           const SizedBox(height: 16),
-if (_singleMode)
+if (_mode == 'day')
             Card(
               elevation: 0,
               child: ListTile(
@@ -300,7 +340,7 @@ if (_singleMode)
                 onTap: _pickSession,
               ),
             )
-          else
+          else if (_mode == 'period')
             Card(
               elevation: 0,
               child: Column(
@@ -320,17 +360,31 @@ if (_singleMode)
                   ),
                 ],
               ),
+            )
+          else
+            Card(
+              elevation: 0,
+              child: ListTile(
+                leading: const Icon(Icons.calendar_month),
+                title: Text(_selectedMonth == null
+                    ? 'Выберите месяц'
+                    : _monthLabel(_selectedMonth!)),
+                subtitle: const Text('Ведомость часов пропусков за месяц'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: _pickMonth,
+              ),
             ),
           const SizedBox(height: 16),
-          Card(
-            elevation: 0,
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Формат файла',
-                      style: TextStyle(fontWeight: FontWeight.w600)),
+          if (_mode != 'month')
+            Card(
+              elevation: 0,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Формат файла',
+                        style: TextStyle(fontWeight: FontWeight.w600)),
                   const SizedBox(height: 4),
                   RadioGroup<String>(
                     groupValue: _format,

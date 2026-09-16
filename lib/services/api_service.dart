@@ -288,6 +288,25 @@ class ApiService {
     return file.path;
   }
 
+  Future<String> exportMonthGroup(
+    int groupId, {
+    required int year,
+    required int month,
+    required String saveDir,
+  }) async {
+    final query = {'year': '$year', 'month': '$month'};
+    final resp = await http.get(_uri('/export/month/$groupId', query), headers: {
+      if (_token != null) 'Authorization': 'Bearer $_token',
+    });
+    if (resp.statusCode >= 400) {
+      throw ApiException(resp.statusCode, _extractError(resp.body));
+    }
+    final fname = _fileName(resp.headers['content-disposition'], 'xlsx');
+    final file = File('$saveDir/$fname');
+    await file.writeAsBytes(resp.bodyBytes);
+    return file.path;
+  }
+
   static String _fileName(String? disposition, String format) {
     final reg = RegExp("filename\\*=UTF-8''([^;]+)");
     final m = reg.firstMatch(disposition ?? '');
